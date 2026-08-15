@@ -1,0 +1,38 @@
+# Environment variables — NEVER commit these
+.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ML model files (large binaries — share via team drive or Git LFS)
+backend/app/ml/model.pkl
+backend/app/ml/pipeline.pkl
+
+# Node / React
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
