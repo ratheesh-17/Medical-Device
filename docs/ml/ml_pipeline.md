@@ -47,9 +47,9 @@ Supervised multi-class classification to predict FDA risk class (I / II / III) o
 
 > **Data leakage note:** Use manufacturer-level aggregates across *other* devices, not the device's own event count, to avoid leakage.
 
-### 4. Train / Validation / Test Split
-- 70% train / 15% validation / 15% test
-- Stratified split to preserve class proportions
+### 4. Train / Test Split
+- 80% train / 20% test
+- Stratified split to preserve class proportions across all three classes
 
 ### 5. Models Trained
 
@@ -59,7 +59,7 @@ Supervised multi-class classification to predict FDA risk class (I / II / III) o
 | Random Forest | Non-linear baseline |
 | XGBoost | Primary candidate |
 
-- Class imbalance handled via `class_weight` or SMOTE
+- Class imbalance handled via `class_weight='balanced'` (LR, RF) and `compute_sample_weight('balanced')` (XGBoost)
 
 ### 6. Evaluation Metrics
 
@@ -70,9 +70,12 @@ Supervised multi-class classification to predict FDA risk class (I / II / III) o
 
 ```python
 import joblib
-joblib.dump(pipeline, "../backend/app/ml/pipeline.pkl")
-joblib.dump(model, "../backend/app/ml/model.pkl")
+joblib.dump(preprocessor, "outputs/preprocessor.pkl")          # preprocessing.ipynb
+shutil.copy("outputs/preprocessor.pkl", "../backend/app/ml/pipeline.pkl")
+joblib.dump(best_model, "../backend/app/ml/model.pkl")           # model_training.ipynb
 ```
+
+**Note**: `pipeline.pkl` is the fitted preprocessor (TF-IDF + OHE + scaler). It is fit **only on X_train** in `preprocessing.ipynb` and never refit at inference time.
 
 ---
 

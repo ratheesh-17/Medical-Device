@@ -18,6 +18,11 @@ build/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
+#dataset
+dataset\devices-1681209661.csv
+dataset\events-1681209680.csv
+dataset\manufacturers-1681209657.csv
+
 # ML model files (large binaries — share via team drive or Git LFS)
 backend/app/ml/model.pkl
 backend/app/ml/pipeline.pkl
