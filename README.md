@@ -33,7 +33,9 @@ Med-Device/
 │   └── manufacturers-1681209657.csv
 │
 ├── notebook/                       # Jupyter ML pipeline
-│   └── model_training.ipynb
+│   ├── preprocessing.ipynb         # EDA + feature engineering → pipeline.pkl
+│   ├── model_training_v3.ipynb     # Model training + weight tuning → model.pkl
+│   └── claude_model.ipynb          # v2 baseline (reference)
 │
 ├── backend/                        # FastAPI application
 │   ├── app/
@@ -56,8 +58,9 @@ Med-Device/
 │   │   │   └── metrics_service.py
 │   │   ├── utils/                  # Shared helpers (to be added)
 │   │   └── ml/
-│   │       ├── model.pkl           # Exported from notebook
-│   │       └── pipeline.pkl        # Exported from notebook
+│   │       ├── model.pkl           # WeightedDecisionClassifier (XGBoost)
+│   │       ├── pipeline.pkl        # Fitted preprocessor (TF-IDF + OHE + Scaler)
+│   │       └── model_classes.py    # LabelOffsetClassifier, WeightedDecisionClassifier
 │   ├── requirements.txt
 │   └── .env.example
 │
@@ -71,6 +74,9 @@ Med-Device/
 │       └── utils/                  # Helper functions
 │
 └── docs/                           # Project documentation
+    ├── architecture.md             # System design + alternatives
+    ├── roadmap.md                  # Development estimation + roadmap
+    ├── presentation.md             # Presentation guide + judge Q&A
     ├── api/                        # API reference
     ├── ml/                         # ML pipeline docs
     ├── database/                   # Schema docs
@@ -85,11 +91,27 @@ See [docs/deployment/setup.md](docs/deployment/setup.md) for full setup instruct
 
 ---
 
+## Model Performance
+
+| Metric | v2 Baseline | v3 Weighted |
+|--------|-------------|-------------|
+| Test Macro-F1 | 0.7426 | **0.8014** |
+| Class I Recall | 41% | **67%** |
+| Class III Recall | 62% | **72%** |
+
+Decision weights: Class I = 1.8, Class II = 1.0, Class III = 2.2
+
+---
+
 ## Documentation Index
 
 | Document | Location |
-|----------|---------|
+|----------|----------|
+| Architecture & Alternatives | [docs/architecture.md](docs/architecture.md) |
 | API Reference | [docs/api/api_reference.md](docs/api/api_reference.md) |
 | ML Pipeline | [docs/ml/ml_pipeline.md](docs/ml/ml_pipeline.md) |
 | Database Schema | [docs/database/schema.md](docs/database/schema.md) |
 | Setup & Deployment | [docs/deployment/setup.md](docs/deployment/setup.md) |
+| CI/CD & Cloud Deployment | [docs/deployment/cicd.md](docs/deployment/cicd.md) |
+| Roadmap & Estimation | [docs/roadmap.md](docs/roadmap.md) |
+| Presentation Guide | [docs/presentation.md](docs/presentation.md) |

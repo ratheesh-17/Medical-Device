@@ -1,0 +1,27 @@
+{
+  "usable_labeled_rows": 32602,
+  "total_device_rows": 118249,
+  "usable_pct": 0.2757,
+  "labeled_countries": [
+    "USA"
+  ],
+  "class_distribution": {
+    "1": 0.1734,
+    "2": 0.7574,
+    "3": 0.0692
+  },
+  "n_classification_categories": 16,
+  "n_manufacturers": 3783,
+  "train_rows": 26081,
+  "test_rows": 6521,
+  "features_used": [
+    "mfr_total_events",
+    "mfr_distinct_countries",
+    "mfr_distinct_devices_recalled",
+    "mfr_pct_class1_events",
+    "description_len",
+    "classification",
+    "description"
+  ],
+  "leakage_note": "No device-level event fields used as features; only manufacturer-level aggregates."
+}

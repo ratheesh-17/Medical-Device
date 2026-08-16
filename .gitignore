@@ -1,8 +1,10 @@
-# Environment variables — NEVER commit these
+# ── Secrets & Environment ──────────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
 backend/.env
 
-# Python
+# ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -10,34 +12,73 @@ __pycache__/
 .Python
 venv/
 .venv/
+env/
 *.egg-info/
 dist/
 build/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Jupyter
+# ── Jupyter ────────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-#dataset
-dataset\devices-1681209661.csv
-dataset\events-1681209680.csv
-dataset\manufacturers-1681209657.csv
-
-# ML model files (large binaries — share via team drive or Git LFS)
+# ── ML model binaries (large — use Git LFS or team drive) ─────────────────────
 backend/app/ml/model.pkl
 backend/app/ml/pipeline.pkl
+notebook/outputs/model.pkl
+notebook/outputs/pipeline.pkl
+notebook/outputs/preprocessor.pkl
 
-# Node / React
+# ── ML output artefacts (generated, not source) ───────────────────────────────
+notebook/outputs/train.csv
+notebook/outputs/test.csv
+
+# ── Raw datasets (large CSVs — do not commit) ─────────────────────────────────
+dataset/
+
+# ── Node / React ───────────────────────────────────────────────────────────────
 frontend/node_modules/
 frontend/build/
 frontend/.env
+frontend/.env.*
+!frontend/.env.example
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
 
-# IDE
+# ── Backend logs ───────────────────────────────────────────────────────────────
+backend/uvicorn.log
+*.log
+
+# ── Hackathon scratch / reference files (not part of the project) ─────────────
+answer.md
+architecture.md
+chatgpt_model_evaluation.md
+claude_backend.md
+claude_frontend.html
+claude_idea.md
+claude_model_evaluation.md
+claude_response.md
+claude_update.md
+frontend_idea.html
+outomes.md
+previous.md
+problem.md
+raw_datasets_info.md
+tech_stack.md
+updated_answers.md
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.suo
 *.user
+*.swp
+*.swo
 
-# OS
+# ── OS ─────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini

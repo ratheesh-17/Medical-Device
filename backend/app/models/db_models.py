@@ -7,6 +7,34 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
+class Manufacturer(Base):
+    __tablename__ = "manufacturers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(500))
+    country = Column(String(100))
+
+    devices = relationship("Device", back_populates="manufacturer")
+    features = relationship("ManufacturerFeatures", back_populates="manufacturer", uselist=False)
+
+
+class ManufacturerFeatures(Base):
+    """
+    Precomputed manufacturer-level event aggregates.
+    Populated once by scripts/seed_db.py using the same logic as preprocessing.ipynb.
+    FastAPI reads these at prediction time — never recomputes per-request.
+    """
+    __tablename__ = "manufacturer_features"
+
+    manufacturer_id = Column(Integer, ForeignKey("manufacturers.id"), primary_key=True, index=True)
+    mfr_total_events = Column(Float, default=0.0)
+    mfr_distinct_countries = Column(Float, default=0.0)
+    mfr_distinct_devices_recalled = Column(Float, default=0.0)
+    mfr_pct_class1_events = Column(Float, default=0.0)
+
+    manufacturer = relationship("Manufacturer", back_populates="features")
+
+
 class Device(Base):
     __tablename__ = "devices"
 
@@ -22,16 +50,6 @@ class Device(Base):
     manufacturer = relationship("Manufacturer", back_populates="devices")
     events = relationship("Event", back_populates="device")
     predictions = relationship("Prediction", back_populates="device")
-
-
-class Manufacturer(Base):
-    __tablename__ = "manufacturers"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(500))
-    country = Column(String(100))
-
-    devices = relationship("Device", back_populates="manufacturer")
 
 
 class Event(Base):
