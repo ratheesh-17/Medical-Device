@@ -2,74 +2,103 @@
 # Pydantic models for request validation and response serialization
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
-# --- Prediction ---
+# ── Prediction ────────────────────────────────────────────────────────────────
 
-class PredictRequest(BaseModel):
-    description: str = Field(..., min_length=5, description="Device description")
-    classification: str = Field(..., description="Device category e.g. Cardiovascular Devices")
-    manufacturer_name: Optional[str] = Field(None, description="Manufacturer name")
+class DeviceLookupRequest(BaseModel):
+    device_id: int = Field(..., description="USA device ID from the ICIJ dataset")
+    known_prior_incidents: Optional[int] = Field(None, ge=0, description="Technician-reported prior incidents — post-model escalation rule only.")
 
     model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "description": "Implantable cardiac pacemaker for rhythm management",
-                "classification": "Cardiovascular Devices",
-                "manufacturer_name": "Medtronic"
-            }
-        }
+        json_schema_extra={"example": {"device_id": 12345}}
     )
+
+
+# Keep for history_service compatibility
+class PredictRequest(BaseModel):
+    device_id: int
+    description: str
+    classification: str
+    manufacturer_name: Optional[str] = None
+    device_name: Optional[str] = None
+    known_prior_incidents: Optional[int] = None
 
 
 class PredictResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
-    predicted_class: str
+    # Looked-up device info
+    device_id: int
+    device_name: Optional[str] = None
+    device_description: Optional[str] = None
+    device_classification: Optional[str] = None
+    manufacturer_name: Optional[str] = None
+
+    predicted_failure: bool
+    predicted_label: str
     confidence: float
     low_confidence_flag: bool
-    probabilities: dict
+    prob_failure: float
+    prob_no_failure: float
+    top_features: List[dict]
     model_version: str
-    top_features: list
+    escalated: bool
+    escalation_note: Optional[str] = None
 
 
-# --- History ---
+# ── History ───────────────────────────────────────────────────────────────────
 
 class PredictionRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
     id: int
+    input_device_name: Optional[str] = None
     input_description: str
     input_classification: str
     input_manufacturer: Optional[str] = None
-    predicted_class: str
+    input_known_prior_incidents: Optional[int] = None
+    predicted_failure: bool
+    predicted_label: str
+    prob_failure: float
+    prob_no_failure: float
     confidence: float
     low_confidence_flag: bool
+    escalated: bool
+    escalation_note: Optional[str] = None
     model_version: str
     created_at: datetime
 
 
-# --- Metrics ---
+# ── Metrics ───────────────────────────────────────────────────────────────────
 
 class ModelMetrics(BaseModel):
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
     version_name: str
     algorithm: str
-    macro_f1: float
-    precision_score: float
-    recall_score: float
+    roc_auc: float
+    f1_tuned: float
+    f1_default: float
+    threshold: float
     trained_at: datetime
-    per_class: Optional[dict] = None
-    class_weights: Optional[dict] = None
 
 
-# --- Manufacturers (for React dropdown) ---
+# ── Manufacturers (React dropdown) ────────────────────────────────────────────
 
 class ManufacturerItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
+
+
+class DeviceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: Optional[str] = None
+    classification: Optional[str] = None
+    country: Optional[str] = None

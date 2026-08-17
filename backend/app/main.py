@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api.routes import predict, history, metrics, health, manufacturers
+from app.api.routes import predict, history, metrics, health, manufacturers, auth, manufacturer
 from app.core.config import settings
 from app.database import engine, Base
 
@@ -41,7 +41,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(predict.router, prefix="/api/v1", tags=["Prediction"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(metrics.router, prefix="/api/v1", tags=["Metrics"])
 app.include_router(manufacturers.router, prefix="/api/v1", tags=["Manufacturers"])
+app.include_router(manufacturer.router, prefix="/api/v1", tags=["Manufacturer Dashboard"])

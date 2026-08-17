@@ -1,58 +1,26 @@
-# ml/model_classes.py
-# Custom sklearn-compatible wrappers.
-# Attribute names MUST match exactly what was pickled by the notebook.
-# Do NOT rename attributes — pickle restores by attribute name.
-
+"""Shared model classes -- see notebook v3 for why this must be a real, separately
+importable module rather than defined inline (pickling/unpickling across processes)."""
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 
-class LabelOffsetClassifier(BaseEstimator, ClassifierMixin):
-    """
-    Wraps XGBoost to handle 1-indexed labels (1,2,3) by shifting to 0-indexed internally.
-    Pickle attributes: base_estimator, label_encoder_, base_estimator_, classes_
-    """
+class ThresholdedClassifier(BaseEstimator, ClassifierMixin):
+    """Wraps a fitted probabilistic binary classifier; applies a tuned decision threshold.
 
-    def __init__(self, base_estimator):
+    predict()       -> 1 if predict_proba()[:,1] >= threshold else 0   (the corrected decision)
+    predict_proba() -> the base estimator's true probabilities          (for a genuine confidence score)
+    """
+    def __init__(self, base_estimator=None, threshold=0.5):
         self.base_estimator = base_estimator
+        self.threshold = threshold
 
-    def fit(self, X, y, **kwargs):
-        from sklearn.preprocessing import LabelEncoder
-        self.label_encoder_ = LabelEncoder()
-        y_enc = self.label_encoder_.fit_transform(y)
-        self.base_estimator_ = self.base_estimator
-        self.base_estimator_.fit(X, y_enc, **kwargs)
-        self.classes_ = self.label_encoder_.classes_
+    def fit(self, X, y):
+        self.classes_ = np.array([0, 1])
         return self
 
     def predict(self, X):
-        y_enc = self.base_estimator_.predict(X)
-        return self.label_encoder_.inverse_transform(y_enc.astype(int))
-
-    def predict_proba(self, X):
-        return self.base_estimator_.predict_proba(X)
-
-
-class WeightedDecisionClassifier(BaseEstimator, ClassifierMixin):
-    """
-    Applies per-class decision weights at inference:
-      predicted_class = argmax(predict_proba(X) * class_weights)
-    predict_proba() returns true unweighted probabilities.
-    Pickle attributes: base_estimator, class_weights, classes_order, classes_
-    """
-
-    def __init__(self, base_estimator, class_weights, classes_order):
-        self.base_estimator = base_estimator
-        self.class_weights = class_weights    # list e.g. [1.8, 1.0, 2.2]
-        self.classes_order = classes_order    # list e.g. [1, 2, 3]
-        self.classes_ = np.array(classes_order)
+        proba = self.base_estimator.predict_proba(X)[:, 1]
+        return (proba >= self.threshold).astype(int)
 
     def predict_proba(self, X):
         return self.base_estimator.predict_proba(X)
-
-    def predict(self, X):
-        proba = self.predict_proba(X)
-        weights = np.array(self.class_weights)
-        weighted = proba * weights
-        indices = np.argmax(weighted, axis=1)
-        return self.classes_[indices]

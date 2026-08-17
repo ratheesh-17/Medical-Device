@@ -1,27 +1,30 @@
 {
-  "usable_labeled_rows": 32602,
-  "total_device_rows": 118249,
-  "usable_pct": 0.2757,
-  "labeled_countries": [
-    "USA"
-  ],
-  "class_distribution": {
-    "1": 0.1734,
-    "2": 0.7574,
-    "3": 0.0692
-  },
-  "n_classification_categories": 16,
-  "n_manufacturers": 3783,
-  "train_rows": 26081,
-  "test_rows": 6521,
+  "target": "failure (binary, risk_score >= 3)",
+  "risk_score_formula": "severity(action_classification) + cause_bonus(determined_cause)",
+  "scope": "USA devices only",
+  "n_devices": 33662,
+  "failure_rate": 0.4563,
+  "train_rows": 26929,
+  "test_rows": 6733,
   "features_used": [
-    "mfr_total_events",
-    "mfr_distinct_countries",
-    "mfr_distinct_devices_recalled",
-    "mfr_pct_class1_events",
-    "description_len",
     "classification",
-    "description"
+    "description",
+    "mfr_loo_event_count",
+    "mfr_countries_all",
+    "mfr_devices_all",
+    "description_len",
+    "classification_prior_count",
+    "event_year"
   ],
-  "leakage_note": "No device-level event fields used as features; only manufacturer-level aggregates."
+  "features_excluded_as_leakage": [
+    "action_classification",
+    "determined_cause",
+    "risk_score"
+  ],
+  "leakage_note": "Manufacturer aggregates are leave-one-out. classification_prior_count is point-in-time safe (prior year cumulative). event_year controls for reporting-era confound.",
+  "new_features_v3": {
+    "classification_prior_count": "Cumulative count of past USA events in this classification (point-in-time safe). Verified signal: 0%->30.5% failure rate trend. Partially confounded with calendar year.",
+    "event_year": "Year of device first event. Controls for reporting-era confound (failure rate jumped 2%->30% between 2005-2009 as reporting system matured)."
+  },
+  "inference_note": "known_prior_incidents (technician-entered) is NOT a model feature. Applied as post-model escalation rule in backend. Per-device incident history showed no learnable pattern (1.7% of devices have >1 event, severity stays flat)."
 }

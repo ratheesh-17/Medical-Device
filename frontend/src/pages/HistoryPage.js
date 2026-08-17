@@ -25,7 +25,6 @@ export default function HistoryPage() {
   const loadMore = () => { const next = skip + LIMIT; setSkip(next); load(next); };
 
   const fmt = (dt) => new Date(dt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-
   const confColor = (c) => c >= 0.75 ? 'var(--teal)' : c >= 0.5 ? 'var(--amber)' : 'var(--red)';
 
   return (
@@ -53,10 +52,12 @@ export default function HistoryPage() {
                 <thead>
                   <tr>
                     <th>ID</th>
-                    <th>Device Description</th>
+                    <th>Device</th>
+                    <th>Description</th>
                     <th>Classification</th>
                     <th>Manufacturer</th>
-                    <th>Risk Class</th>
+                    <th>Result</th>
+                    <th>P(Failure)</th>
                     <th>Confidence</th>
                     <th>Flag</th>
                     <th>Date</th>
@@ -66,14 +67,24 @@ export default function HistoryPage() {
                   {records.map((r) => (
                     <tr key={r.id}>
                       <td><span className="mono" style={{ color: 'var(--muted)', fontSize: '11px' }}>#{r.id}</span></td>
-                      <td style={{ maxWidth: '240px' }}>
-                        <div className="dev-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }} title={r.input_description}>
+                      <td>
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                          {r.input_device_name || <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: '200px' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '190px', fontSize: '12px', color: 'var(--muted)' }} title={r.input_description}>
                           {r.input_description}
                         </div>
                       </td>
                       <td><span style={{ color: 'var(--muted)', fontSize: '12px' }}>{r.input_classification}</span></td>
                       <td><span style={{ color: 'var(--muted)', fontSize: '12px' }}>{r.input_manufacturer || '—'}</span></td>
-                      <td><RiskBadge cls={r.predicted_class} /></td>
+                      <td><RiskBadge failure={r.predicted_failure} /></td>
+                      <td>
+                        <span className="mono" style={{ fontSize: '12px', fontWeight: 600, color: r.predicted_failure ? 'var(--red)' : 'var(--teal)' }}>
+                          {(r.prob_failure * 100).toFixed(1)}%
+                        </span>
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div className="bar-bg" style={{ width: '60px' }}>

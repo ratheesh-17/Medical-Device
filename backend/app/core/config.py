@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     MODEL_PATH: str = "app/ml/model.pkl"
     PIPELINE_PATH: str = "app/ml/pipeline.pkl"
 
+    # Auth
+    SECRET_KEY: str = "sentrymed-secret-key-change-in-prod"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ALERT_PROB_THRESHOLD: float = 0.42
+
     class Config:
         env_file = ".env"
 

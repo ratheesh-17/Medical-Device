@@ -1,85 +1,135 @@
-# Development Estimation & Roadmap
+# Roadmap & Development Estimation
 
-## Hackathon Build — What Was Delivered
-
-| Phase | Work Done | Effort |
-|-------|-----------|--------|
-| Data exploration & preprocessing | EDA on 3 CSVs, feature engineering, train/test split, `preprocessing.ipynb` | ~1.5 days |
-| Model training v1/v2 | Baseline models, CV selection, XGBoost winner, `LabelOffsetClassifier` | ~1 day |
-| Model training v3 | Class imbalance diagnosis, OOF weight tuning, `WeightedDecisionClassifier`, Macro-F1: 0.74 → 0.80 | ~0.5 days |
-| Backend API | FastAPI app, 4 routes, SQLAlchemy models, prediction service | ~1 day |
-| Frontend | React UI — prediction form, results display, history, metrics | ~1.5 days |
-| Documentation | API reference, ML pipeline, DB schema, setup guide, architecture | ~0.5 days |
-| **Total** | | **~6 days** |
+Cognizant NPN AI Hackathon — Medical Device Risk Predictor
 
 ---
 
-## Team Task Distribution
+## Project Phases
 
-| Area | Owner(s) |
-|------|---------|
-| Data preprocessing & EDA | Data team (2) |
-| ML model training & evaluation | ML team (2) |
-| FastAPI backend | Backend team (2) |
-| React frontend | Frontend team (2) |
+### Phase 1 — Data & ML Pipeline ✅ Complete
 
----
-
-## Immediate Next Steps (Post-Hackathon)
-
-### Sprint 1 — Complete Core Integration (1 week)
-- [ ] Activate `prediction_service.py` — uncomment model load + inference code
-- [ ] Uncomment `Base.metadata.create_all` in `main.py` to auto-create DB tables
-- [ ] Seed `model_versions` table with v3 metrics from `metrics.json`
-- [ ] Wire frontend to all 4 API endpoints
-- [ ] End-to-end smoke test: form → prediction → history → metrics
-
-### Sprint 2 — Production Hardening (1 week)
-- [ ] Add input sanitization and rate limiting to API
-- [ ] Add structured logging (request ID, latency, predicted class)
-- [ ] Add `/api/v1/metrics` seeding script from `metrics.json`
-- [ ] Write unit tests for `PredictionService` and `WeightedDecisionClassifier`
-- [ ] Add CI pipeline (GitHub Actions) — lint + test on push
-
-### Sprint 3 — UX & Explainability (1 week)
-- [ ] Add SHAP feature importance to prediction response
-- [ ] Show confidence bar with color coding (green/yellow/red)
-- [ ] Add batch prediction endpoint (`POST /api/v1/predict/batch`)
-- [ ] Add CSV upload for bulk device assessment
-- [ ] Improve history table — filters by class, date range, confidence
+| Task | Status | Notes |
+|---|---|---|
+| Dataset exploration (ICIJ Implant Files) | ✅ | 3 CSVs: devices, events, manufacturers |
+| USA-only scope decision | ✅ | `action_classification` + `determined_cause` only populated for USA |
+| Label construction (risk score → binary failure) | ✅ | Class I recall = 3, Class II = 2, Class III = 1; cause bonus ±1 |
+| Feature engineering (LOO manufacturer aggregates) | ✅ | Leave-one-out to prevent leakage |
+| Preprocessing pipeline (TF-IDF + OHE + Scaler) | ✅ | 821-dim feature vector |
+| Model selection (LR vs RF vs XGBoost) | ✅ | XGBoost selected: CV ROC-AUC 0.8551 |
+| Threshold tuning (OOF search 0.30–0.71) | ✅ | Optimal threshold = 0.42 |
+| Final test evaluation | ✅ | ROC-AUC 0.8553, F1 0.7528 |
+| Artifact export (model.pkl, pipeline.pkl, metrics.json) | ✅ | Saved to `backend/app/ml/` |
 
 ---
 
-## Medium-Term Roadmap (1–3 months)
+### Phase 2 — Backend API ✅ Complete
 
-| Feature | Value | Effort |
-|---------|-------|--------|
-| Model retraining pipeline | Keep model fresh as new recall data arrives | High |
-| Data drift monitoring | Alert when input distribution shifts from training data | Medium |
-| MLflow integration | Experiment tracking, model registry, artifact versioning | Medium |
-| Cloud deployment (AWS) | ECS/Fargate for API, RDS for MySQL, S3 for model artifacts | High |
-| User authentication | Multi-user support, per-user prediction history | Medium |
-| Feedback loop | Allow users to flag incorrect predictions → retrain data | High |
-| REST API versioning | `/api/v2/` with backward compatibility | Low |
-
----
-
-## Long-Term Vision (3–12 months)
-
-- **Real-time data ingestion** — ingest new FDA recall events automatically via public API
-- **Multi-country support** — extend beyond USA labels using semi-supervised learning
-- **Regulatory reporting** — export prediction audit trails in FDA-compatible format
-- **Mobile app** — field engineers can assess device risk on-site
-- **Ensemble upgrade** — add LightGBM / CatBoost to the ensemble for further F1 gains
+| Task | Status | Notes |
+|---|---|---|
+| FastAPI project scaffold | ✅ | `app/main.py`, CORS, router registration |
+| SQLAlchemy ORM models (5 tables) | ✅ | manufacturers, manufacturer_features, devices, predictions, model_versions |
+| Pydantic schemas | ✅ | PredictRequest, PredictResponse, PredictionRecord, ModelMetrics, ManufacturerItem |
+| `PredictionService` — ML inference | ✅ | Loads pkl once at startup; sys.modules alias for pickle resolution |
+| `ManufacturerService` — DB feature lookup | ✅ | Fuzzy ILIKE search; safe defaults when not found |
+| `HistoryService` — save + retrieve predictions | ✅ | Newest-first, paginated |
+| `MetricsService` — model version query | ✅ | Returns active model from model_versions |
+| `POST /predict` endpoint | ✅ | Full inference + persist flow |
+| `GET /predictions` endpoint | ✅ | Pagination with skip/limit |
+| `GET /metrics` + `GET /metrics/all` | ✅ | Active model + all versions |
+| `GET /manufacturers` endpoint | ✅ | Autocomplete with q + limit params |
+| `GET /health` endpoint | ✅ | DB + model + pipeline status |
+| `seed_db.py` — database seeding | ✅ | 31,827 manufacturers, 3,952 features, 1 model version |
+| `reset_db.py` — schema migration utility | ✅ | Drop + recreate all tables |
+| `.env` configuration | ✅ | DB, model paths, CORS origins, app version |
 
 ---
 
-## Key Risks & Mitigations
+### Phase 3 — Frontend ✅ Complete
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|-----------|
-| Model degrades as recall data ages | Medium | High | Scheduled retraining pipeline |
-| Class III recall still at 72% | High | High | More labeled data, SMOTE, cost-sensitive loss |
-| MySQL single point of failure | Low | High | RDS Multi-AZ in production |
-| Large model file slows cold start | Low | Medium | Model already 1.2 MB — acceptable |
-| Frontend-backend CORS misconfiguration | Low | Medium | `ALLOWED_ORIGINS` env var, tested in CI |
+| Task | Status | Notes |
+|---|---|---|
+| React project scaffold | ✅ | CRA, React Router |
+| `PredictPage` — prediction form | ✅ | Description, classification, manufacturer autocomplete, device name |
+| `HistoryPage` — prediction history table | ✅ | Paginated, newest first |
+| `MetricsPage` — model performance panel | ✅ | ROC-AUC, F1, threshold display |
+| `HealthPage` — system status | ✅ | DB, model, pipeline status |
+| `ConfidenceBar` component | ✅ | Visual confidence indicator |
+| `ProbabilityBars` component | ✅ | P(failure) vs P(no failure) bars |
+| `RiskBadge` component | ✅ | Failure / No Failure badge |
+| `TopFeatures` component | ✅ | Top 5 influential features |
+| `Topbar` component | ✅ | Navigation |
+| `api.js` service layer | ✅ | Axios calls to all 6 endpoints |
+
+---
+
+### Phase 4 — Documentation ✅ Complete
+
+| Document | Status |
+|---|---|
+| `docs/ml/ml_pipeline.md` | ✅ |
+| `docs/database/schema.md` | ✅ |
+| `docs/api/api_reference.md` | ✅ |
+| `docs/architecture.md` | ✅ |
+| `docs/deployment/setup.md` | ✅ |
+| `docs/deployment/cicd.md` | ✅ |
+| `docs/roadmap.md` | ✅ |
+| `docs/presentation.md` | ✅ |
+| `README.md` | ✅ |
+
+---
+
+### Phase 5 — Testing ✅ Complete
+
+| Task | Status | Notes |
+|---|---|---|
+| All 12 API endpoint tests | ✅ | Passed — see test results below |
+| DB migration + re-seed verification | ✅ | reset_db.py + seed_db.py both clean |
+| Prediction history persistence | ✅ | Pagination verified (skip/limit) |
+| Validation error handling | ✅ | 422 on short description, missing fields |
+| Manufacturer not found fallback | ✅ | Defaults used, prediction still returns |
+
+**Endpoint test results:**
+
+| Test | Result |
+|---|---|
+| `GET /health` | `{"status":"ok","db":"ok","model":"loaded","pipeline":"loaded"}` ✅ |
+| `GET /metrics` | `{"roc_auc":0.8553,"f1_tuned":0.7528,"f1_default":0.7308,"threshold":0.42}` ✅ |
+| `GET /metrics/all` | Array with 1 version ✅ |
+| `GET /manufacturers?q=medtronic&limit=5` | 5 fuzzy-matched results ✅ |
+| `POST /predict` (Medtronic, cardiac pacemaker) | `predicted_failure: false, confidence: 0.7593` ✅ |
+| `POST /predict` (DePuy, ASR Hip) | `predicted_failure: false, confidence: 0.7899` ✅ |
+| `POST /predict` (no manufacturer) | Uses defaults, valid prediction ✅ |
+| `POST /predict` (description < 5 chars) | `422 string_too_short` ✅ |
+| `POST /predict` (missing description) | `422 Field required` ✅ |
+| `GET /predictions` | 5 records, newest first ✅ |
+| `GET /predictions?skip=0&limit=2` | First 2 records ✅ |
+| `GET /predictions?skip=2&limit=2` | Next 2 records (pagination) ✅ |
+
+---
+
+## Effort Estimation
+
+| Phase | Estimated | Actual |
+|---|---|---|
+| Data exploration + label design | 1 day | 1 day |
+| Feature engineering + preprocessing | 1 day | 1 day |
+| Model selection + threshold tuning | 1 day | 1 day |
+| Backend scaffold + DB setup | 1 day | 1 day |
+| All 6 API endpoints + services | 1.5 days | 2 days (DB schema bug + migration) |
+| Frontend (4 pages + 5 components) | 1.5 days | 1.5 days |
+| Documentation | 1 day | 1 day |
+| Testing + bug fixes | 0.5 days | 0.5 days |
+| **Total** | **~8.5 days** | **~9 days** |
+
+---
+
+## Known Limitations & Future Work
+
+| Item | Priority | Notes |
+|---|---|---|
+| USA-only scope | Medium | `action_classification` / `determined_cause` not populated for non-USA devices. Expanding requires a different label strategy for international data. |
+| `mfr_countries_all` always = 1.0 | Low | Constant feature for current dataset. Kept for schema completeness and future extensibility when non-USA data is added. |
+| Device-level history excluded | By design | Device history = knowing the answer (leakage). Manufacturer-level LOO is the correct abstraction. |
+| No authentication on API | Medium | Add JWT or API key auth before any public deployment. |
+| Model retraining pipeline | Medium | Currently manual (re-run notebooks). Could be automated with Airflow or a scheduled ECS task. |
+| Frontend test coverage | Low | No unit tests on React components. Add with React Testing Library. |

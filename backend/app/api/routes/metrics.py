@@ -23,26 +23,16 @@ def _load_metrics_json() -> dict:
 
 
 def _enrich(model_version, metrics_data: dict) -> dict:
-    """Merge DB model_version row with per-class data from metrics.json."""
-    result = {
+    """Merge DB model_version row with data from metrics.json."""
+    return {
         "version_name": model_version.version_name,
         "algorithm": model_version.algorithm,
-        "macro_f1": model_version.macro_f1,
-        "precision_score": model_version.precision_score,
-        "recall_score": model_version.recall_score,
+        "roc_auc": model_version.roc_auc,
+        "f1_tuned": model_version.f1_tuned,
+        "f1_default": model_version.f1_default,
+        "threshold": model_version.threshold,
         "trained_at": model_version.trained_at,
-        "per_class": None,
-        "class_weights": None,
     }
-    if metrics_data:
-        per_class_raw = metrics_data.get("test_per_class_weighted", {})
-        result["per_class"] = {
-            "I":   per_class_raw.get("1", {}),
-            "II":  per_class_raw.get("2", {}),
-            "III": per_class_raw.get("3", {}),
-        }
-        result["class_weights"] = metrics_data.get("class_weights", {})
-    return result
 
 
 @router.get("/metrics", response_model=ModelMetrics)

@@ -11,5 +11,5 @@ def get_active_model_metrics(db: Session) -> ModelVersion | None:
 
 
 def get_all_model_versions(db: Session) -> list:
-    """Return all model versions ordered by training date."""
+    """Return all model versions ordered by training date (newest first)."""
     return db.query(ModelVersion).order_by(ModelVersion.trained_at.desc()).all()

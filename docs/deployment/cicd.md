@@ -1,20 +1,27 @@
 # CI/CD & Cloud Deployment
 
+## Local Development
+
+See [setup.md](setup.md) for full local setup instructions.
+
+Quick start once set up:
+
+```bash
+# Terminal 1 — backend
+cd backend && uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — frontend
+cd frontend && npm start
+```
+
 ---
 
-## CI/CD Pipeline Design
+## CI Pipeline (GitHub Actions)
 
-### Tool: GitHub Actions
-
-Two workflows — one for continuous integration (every push/PR), one for deployment (merge to main).
-
----
-
-### Workflow 1 — CI (`.github/workflows/ci.yml`)
-
-Triggers on every push and pull request to `main`.
+The pipeline runs on every push and pull request to `main`.
 
 ```yaml
+# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -24,264 +31,147 @@ on:
     branches: [main]
 
 jobs:
-  backend-test:
+  backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
+        run: pip install -r backend/requirements.txt
 
       - name: Lint
         run: |
-          cd backend
           pip install flake8
-          flake8 app/ --max-line-length=100
+          flake8 backend/app --max-line-length=120
 
-      - name: Run tests
+      - name: Type check
         run: |
-          cd backend
-          pytest tests/ -v
-        env:
-          DB_HOST: localhost
-          DB_USER: root
-          DB_PASSWORD: ""
-          DB_NAME: meddevice_test
+          pip install mypy
+          mypy backend/app --ignore-missing-imports
 
-  frontend-test:
+  frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: Install & build
+      - name: Install and build
         run: |
           cd frontend
-          npm install
+          npm ci
           npm run build
 ```
 
 ---
 
-### Workflow 2 — Deploy (`.github/workflows/deploy.yml`)
+## Cloud Deployment (AWS)
 
-Triggers on merge to `main` (after CI passes).
+### Recommended architecture
 
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy-backend:
-    runs-on: ubuntu-latest
-    needs: []
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build & push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/meddevice-backend:$IMAGE_TAG ./backend
-          docker push $ECR_REGISTRY/meddevice-backend:$IMAGE_TAG
-
-      - name: Deploy to ECS
-        run: |
-          aws ecs update-service \
-            --cluster meddevice-cluster \
-            --service meddevice-backend \
-            --force-new-deployment
-
-  deploy-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build React app
-        run: |
-          cd frontend
-          npm install
-          npm run build
-        env:
-          REACT_APP_API_URL: ${{ secrets.API_URL }}
-
-      - name: Deploy to S3
-        run: |
-          aws s3 sync frontend/build/ s3://${{ secrets.S3_BUCKET }} --delete
-
-      - name: Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
-            --paths "/*"
+```
+Route 53 (DNS)
+     │
+     ▼
+Application Load Balancer
+     │
+     ├── ECS Fargate (FastAPI container)
+     │        │
+     │        └── ECR (Docker image registry)
+     │
+     └── S3 + CloudFront (React static build)
+              │
+              └── RDS MySQL (db.t3.micro)
 ```
 
----
-
-## Docker Setup
-
-### Backend Dockerfile (`backend/Dockerfile`)
+### Backend — Docker
 
 ```dockerfile
+# backend/Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY app/ ./app/
+COPY scripts/ ./scripts/
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-### Docker Compose (local dev with MySQL)
+Build and push to ECR:
 
-```yaml
-version: "3.9"
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    env_file: ./backend/.env
-    depends_on:
-      - db
+```bash
+aws ecr get-login-password --region ap-south-1 | \
+  docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
+docker build -t meddevice-api ./backend
+docker tag meddevice-api:latest <account>.dkr.ecr.ap-south-1.amazonaws.com/meddevice-api:latest
+docker push <account>.dkr.ecr.ap-south-1.amazonaws.com/meddevice-api:latest
+```
 
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: meddevice
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
+### Frontend — S3 + CloudFront
 
-volumes:
-  mysql_data:
+```bash
+cd frontend
+npm run build
+
+aws s3 sync build/ s3://meddevice-frontend --delete
+aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"
+```
+
+### Environment variables on ECS
+
+Set these as ECS task environment variables or via AWS Secrets Manager:
+
+```
+DB_HOST=<rds-endpoint>
+DB_PORT=3306
+DB_USER=meddevice
+DB_PASSWORD=<secret>
+DB_NAME=meddevice
+ALLOWED_ORIGINS=["https://your-cloudfront-domain.cloudfront.net"]
+MODEL_PATH=app/ml/model.pkl
+PIPELINE_PATH=app/ml/pipeline.pkl
+```
+
+### RDS MySQL setup
+
+```bash
+aws rds create-db-instance \
+  --db-instance-identifier meddevice-db \
+  --db-instance-class db.t3.micro \
+  --engine mysql \
+  --engine-version 8.0 \
+  --master-username meddevice \
+  --master-user-password <password> \
+  --allocated-storage 20 \
+  --db-name meddevice
+```
+
+After RDS is ready, run seed from a bastion or ECS task:
+
+```bash
+python -m scripts.seed_db
 ```
 
 ---
 
-## Cloud Deployment Architecture (AWS)
+## Model artifact deployment
 
-```
-                        ┌─────────────────────┐
-  Users ──── HTTPS ────▶│   CloudFront (CDN)  │
-                        │   + S3 (React build) │
-                        └──────────┬──────────┘
-                                   │ API calls
-                        ┌──────────▼──────────┐
-                        │  Application Load   │
-                        │     Balancer        │
-                        └──────────┬──────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │     ECS Fargate Cluster      │
-                    │  ┌──────────┐ ┌──────────┐  │
-                    │  │ FastAPI  │ │ FastAPI  │  │
-                    │  │ Task 1   │ │ Task 2   │  │
-                    │  └────┬─────┘ └────┬─────┘  │
-                    └───────┼────────────┼─────────┘
-                            │            │
-              ┌─────────────▼────────────▼──────────┐
-              │           RDS MySQL                  │
-              │        (Multi-AZ, encrypted)         │
-              └──────────────────────────────────────┘
-                            │
-              ┌─────────────▼──────────────┐
-              │   S3 Bucket (model store)  │
-              │  model.pkl  pipeline.pkl   │
-              └────────────────────────────┘
-```
+`model.pkl` and `pipeline.pkl` are baked into the Docker image at build time. When a new model is trained:
 
-### AWS Services Used
-
-| Service | Purpose |
-|---------|---------|
-| ECS Fargate | Run FastAPI containers — serverless, no EC2 management |
-| ECR | Docker image registry |
-| RDS MySQL (Multi-AZ) | Production database with automatic failover |
-| S3 | Host React build + store model artifacts |
-| CloudFront | CDN for frontend — low latency globally |
-| ALB | Load balance across ECS tasks |
-| Secrets Manager | Store DB credentials, injected as env vars into ECS tasks |
-| CloudWatch | Logs and metrics for ECS tasks |
-
----
-
-## Model Artifact Strategy
-
-Model files (`model.pkl`, `pipeline.pkl`) are stored in S3 and downloaded by ECS tasks at startup:
-
-```python
-# In prediction_service.py _load() — production version
-import boto3, tempfile, joblib, os
-
-def _load(self):
-    s3 = boto3.client("s3")
-    bucket = os.getenv("MODEL_BUCKET", "meddevice-models")
-    for key, attr in [("model.pkl", "model"), ("pipeline.pkl", "pipeline")]:
-        with tempfile.NamedTemporaryFile() as f:
-            s3.download_fileobj(bucket, key, f)
-            setattr(self, attr, joblib.load(f.name))
-```
-
-This means model updates don't require a new Docker image — just upload new `.pkl` files to S3 and restart the ECS service.
-
----
-
-## Deployment Environments
-
-| Environment | Trigger | Infrastructure |
-|-------------|---------|----------------|
-| Local | Manual (`uvicorn --reload`) | Docker Compose |
-| Staging | Push to `develop` branch | ECS Fargate (1 task, smaller RDS) |
-| Production | Merge to `main` | ECS Fargate (2+ tasks, RDS Multi-AZ) |
-
----
-
-## GitHub Secrets Required
-
-| Secret | Value |
-|--------|-------|
-| `AWS_ACCESS_KEY_ID` | IAM user with ECS/ECR/S3 permissions |
-| `AWS_SECRET_ACCESS_KEY` | Corresponding secret |
-| `API_URL` | Production API base URL |
-| `S3_BUCKET` | Frontend S3 bucket name |
-| `CF_DISTRIBUTION_ID` | CloudFront distribution ID |
+1. Run both notebooks to regenerate artifacts
+2. Rebuild and push the Docker image
+3. Update the ECS service to deploy the new image
+4. Re-run `seed_db.py` to update `model_versions` with new metrics

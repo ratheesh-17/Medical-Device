@@ -1,16 +1,11 @@
-const config = {
-  I:   { cls: 'high', label: 'Class I — Critical Risk' },
-  II:  { cls: 'med',  label: 'Class II — Moderate Risk' },
-  III: { cls: 'low',  label: 'Class III — Low Risk' },
-};
-
-export default function RiskBadge({ cls, full = false }) {
-  if (!cls || !config[cls]) return null;
-  const { cls: pillCls, label } = config[cls];
+export default function RiskBadge({ failure, full = false }) {
+  if (failure === undefined || failure === null) return null;
+  const pillCls = failure ? 'high' : 'low';
+  const label = failure ? 'Failure' : 'No Failure';
   return (
     <span className={`risk-pill ${pillCls}`}>
       <span className="dot" />
-      {full ? label : `Class ${cls}`}
+      {full ? (failure ? 'Predicted Failure' : 'No Failure Predicted') : label}
     </span>
   );
 }

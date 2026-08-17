@@ -1,122 +1,137 @@
-# Setup & Deployment Guide
-
----
+# Setup & Deployment
 
 ## Prerequisites
 
-| Tool | Version |
-|------|---------|
-| Python | 3.11+ |
-| Node.js | 18+ |
-| MySQL | 8.0+ |
-| Jupyter Notebook / JupyterLab | Latest |
+| Tool | Version | Purpose |
+|---|---|---|
+| Python | 3.10+ | Backend + notebooks |
+| MySQL | 8.0+ | Database |
+| Node.js | 18+ | Frontend |
+| Jupyter | Any | Running notebooks |
 
 ---
 
-## 1. Clone & Install
+## Step 1 — Run the ML notebooks
 
-```bash
-git clone <repo-url>
-cd Med-Device
-```
-
----
-
-## 2. Database Setup
-
-```sql
-CREATE DATABASE meddevice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-Tables are auto-created by SQLAlchemy on first backend startup — uncomment `Base.metadata.create_all` in `main.py`.
-
----
-
-## 3. Backend Setup
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # macOS/Linux
-pip install -r requirements.txt
-
-copy .env.example .env         # Windows
-# cp .env.example .env         # macOS/Linux
-```
-
-Edit `.env` with your MySQL credentials:
-
-```
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=meddevice
-```
-
----
-
-## 4. ML Model Training
-
-Run the notebooks **in order**:
-
-### Step 1 — Preprocessing
+The notebooks must run before the backend starts — they produce `model.pkl` and `pipeline.pkl`.
 
 ```bash
 cd notebook
-jupyter notebook preprocessing.ipynb
+pip install -r ../backend/requirements.txt
+jupyter notebook
 ```
 
-Run all cells. Outputs:
-- `notebook/outputs/train.csv`
-- `notebook/outputs/test.csv`
-- `backend/app/ml/pipeline.pkl`
+Run in order:
 
-### Step 2 — Model Training (v3)
-
-```bash
-jupyter notebook model_training_v3.ipynb
-```
-
-Run all cells. Outputs:
-- `backend/app/ml/model.pkl`  ← `WeightedDecisionClassifier` wrapping XGBoost
-- `backend/app/ml/pipeline.pkl`  ← updated copy
-- `notebook/outputs/metrics.json`
-
-> **Important:** `backend/app/ml/model_classes.py` must exist before loading any `.pkl` file. It defines `LabelOffsetClassifier` and `WeightedDecisionClassifier` — required for pickle deserialization.
+1. `new_preprocessing_eda.ipynb` — produces `outputs/preprocessor.pkl`, `outputs/train.csv`, `outputs/test.csv`, `outputs/eda_summary.json`
+2. `model_training.ipynb` — produces `backend/app/ml/model.pkl`, `backend/app/ml/pipeline.pkl`, `outputs/metrics.json`
 
 ---
 
-## 5. Seed the Database
+## Step 2 — Set up MySQL
 
-After running the notebooks (step 4), seed MySQL with manufacturer data and model metrics:
+```sql
+CREATE DATABASE meddevice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'meddevice'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON meddevice.* TO 'meddevice'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+---
+
+## Step 3 — Configure the backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+APP_NAME=MedDevice Risk Predictor
+APP_VERSION=1.0.0
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=meddevice
+DB_PASSWORD=your_password
+DB_NAME=meddevice
+
+ALLOWED_ORIGINS=["http://localhost:3000"]
+
+MODEL_PATH=app/ml/model.pkl
+PIPELINE_PATH=app/ml/pipeline.pkl
+```
+
+---
+
+## Step 4 — Install backend dependencies
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+---
+
+## Step 5 — Seed the database
 
 ```bash
 cd backend
 python -m scripts.seed_db
 ```
 
-This script:
-- Loads the 3 raw CSVs into MySQL (`manufacturers`, `devices`, `events` tables)
-- Computes `manufacturer_features` using the same aggregation logic as `preprocessing.ipynb`
-- Seeds `model_versions` from `notebook/outputs/metrics.json`
+Expected output:
+
+```
+Creating tables...
+Loading CSVs...
+  devices: (118249, 15), events: (124969, 30), manufacturers: (31827, 10)
+  USA-only: 33657 devices, 35818 events
+Seeding manufacturers...
+  Inserted 31827 manufacturers.
+Computing manufacturer_features (LOO)...
+  Inserted 3952 manufacturer_features rows.
+Seeding model_versions from metrics.json...
+  model_versions seeded.
+Done.
+```
+
+Re-running is safe — it deletes and re-inserts manufacturers, manufacturer_features, and model_versions each time.
 
 ---
 
-## 6. Start the Backend
+## Step 6 — Start the backend
 
 ```bash
 cd backend
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API: `http://localhost:8000`  
-Interactive docs: `http://localhost:8000/docs`
+Verify it is healthy:
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+Expected:
+
+```json
+{
+  "status": "ok",
+  "service": "MedDevice Risk Predictor API",
+  "db": "ok",
+  "model": "loaded",
+  "pipeline": "loaded"
+}
+```
+
+Interactive API docs: `http://localhost:8000/docs`
 
 ---
 
-## 6. Frontend Setup
+## Step 7 — Start the frontend
 
 ```bash
 cd frontend
@@ -124,48 +139,45 @@ npm install
 npm start
 ```
 
-Frontend: `http://localhost:3000`
+Frontend runs at `http://localhost:3000`.
 
 ---
 
-## 7. Verify Everything Works
+## File locations after setup
 
-```bash
-# Health check
-curl http://localhost:8000/api/v1/health
-
-# Manufacturer autocomplete (for React dropdown)
-curl "http://localhost:8000/api/v1/manufacturers?q=medtronic"
-
-# Test prediction
-curl -X POST http://localhost:8000/api/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Implantable cardiac pacemaker", "classification": "Cardiovascular Devices", "manufacturer_name": "Medtronic"}'
 ```
+Med-Device/
+├── notebook/
+│   ├── outputs/
+│   │   ├── metrics.json           <- model metrics (read by seed_db + /metrics endpoint)
+│   │   ├── eda_summary.json       <- dataset stats
+│   │   ├── preprocessor.pkl       <- intermediate (not used by API directly)
+│   │   └── train.csv / test.csv   <- intermediate (not used by API)
+│   └── model_classes.py           <- ThresholdedClassifier source
+│
+└── backend/
+    └── app/
+        └── ml/
+            ├── model.pkl          <- ThresholdedClassifier(XGBoost, threshold=0.42)
+            ├── pipeline.pkl       <- ColumnTransformer (TF-IDF + OHE + Scaler)
+            └── model_classes.py   <- must match notebook/model_classes.py
 ```
 
 ---
 
-## Environment Variables Reference
+## Troubleshooting
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| DB_HOST | localhost | MySQL host |
-| DB_PORT | 3306 | MySQL port |
-| DB_USER | root | MySQL username |
-| DB_PASSWORD | *(empty)* | MySQL password |
-| DB_NAME | meddevice | Database name |
-| MODEL_PATH | app/ml/model.pkl | Path to model.pkl |
-| PIPELINE_PATH | app/ml/pipeline.pkl | Path to pipeline.pkl |
+**`status: degraded` / `model: not loaded`**
+Model files are missing. Run both notebooks in order, then restart the server.
 
----
+**`Access denied for user`**
+Check `.env` DB credentials match your MySQL user.
 
-## Startup Order
+**`ModuleNotFoundError: No module named 'model_classes'`**
+The `sys.modules` alias in `prediction_service.py` handles this automatically at startup. Ensure `backend/app/ml/model_classes.py` exists and matches the notebook version.
 
-```
-1. MySQL running
-2. Backend started  (auto-creates tables)
-3. Notebooks run    (exports .pkl files)
-4. Backend restarted (loads new .pkl files)
-5. Frontend started
-```
+**`seed_db.py` crashes on manufacturer insert**
+The manufacturers CSV has no `country` column — this is expected and handled. The ORM `Manufacturer` model does not include a `country` field.
+
+**Prediction returns `503`**
+Model not loaded. Check the `/health` endpoint and run notebooks if needed.
