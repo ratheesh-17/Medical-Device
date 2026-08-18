@@ -53,13 +53,13 @@ def me(current_user: User = Depends(get_current_user)):
 
 @router.get("/auth/manufacturers")
 def list_mfr_accounts(db: Session = Depends(get_db)):
-    """Returns all seeded manufacturer accounts with names for the login dropdown."""
-    users = db.query(User).filter(User.role == "manufacturer").all()
+    """Returns all seeded manufacturer accounts sorted by name for the login dropdown."""
+    users = db.query(User).filter(User.role == "manufacturer").order_by(User.username).all()
     return [
         {
             "username": u.username,
             "manufacturer_id": u.manufacturer_id,
             "name": u.manufacturer.name if u.manufacturer else u.username,
         }
-        for u in users
+        for u in sorted(users, key=lambda u: (u.manufacturer.name if u.manufacturer else "").lower())
     ]

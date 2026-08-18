@@ -227,16 +227,17 @@ The tuned threshold improves recall for the "Failure" class (0.70 → 0.83) at t
 
 ## 11. Inference Flow
 
-At prediction time (FastAPI `/api/v1/predict`):
+At prediction time (FastAPI `POST /api/v1/predict`):
 
-1. Receive JSON payload with `description`, `classification`, `manufacturer_name` (optional), `device_name` (optional), `known_prior_incidents` (optional).
-2. Look up `mfr_loo_event_count`, `mfr_countries_all`, `mfr_devices_all` from `manufacturer_features` table via fuzzy name match. Use safe defaults if not found.
+1. Receive `{ device_id, known_prior_incidents? }`. Look up `Device` row in DB — fetches `name`, `description`, `classification`, `manufacturer_id`.
+2. Look up `mfr_loo_event_count`, `mfr_countries_all`, `mfr_devices_all` from `manufacturer_features` table via manufacturer name fuzzy match. Use safe defaults if not found.
 3. Look up `classification_prior_count` from `classification_features` table by exact classification match. Set `event_year` to current year. Use safe defaults if not found.
 4. Compute `description_len`. Build a single-row DataFrame with all 8 features.
 5. `pipeline.pkl` → `transform()` → 821-dimensional sparse feature vector.
 6. `model.pkl` → `predict_proba()` → `[P(no_failure), P(failure)]`; `predict()` → 0 or 1 (applies threshold=0.42 internally).
 7. Apply escalation rule: if `known_prior_incidents >= 2` AND `prob_failure >= 0.30`, set `escalated=True` and override label to Failure if needed.
-8. Return full prediction response including `escalated` and `escalation_note`.
+8. If `prob_failure >= 0.42` AND device's manufacturer has a registered `User` account: create `Alert` row.
+9. Persist prediction to `predictions` table. Return full `PredictResponse`.
 
 ---
 

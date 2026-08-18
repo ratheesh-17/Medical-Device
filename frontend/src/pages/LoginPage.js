@@ -31,8 +31,8 @@ export default function LoginPage() {
   }, []);
 
   const filtered = search.trim()
-    ? mfrList.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()))
-    : mfrList;
+    ? mfrList.filter((m) => m.name.toLowerCase().includes(search.toLowerCase())).slice(0, 60)
+    : mfrList.slice(0, 200);
 
   const handleSelect = (m) => {
     setSelected(m);
@@ -106,7 +106,7 @@ export default function LoginPage() {
                   />
                   {showDrop && filtered.length > 0 && (
                     <div className="autocomplete-list" style={{ maxHeight: '220px' }}>
-                      {filtered.slice(0, 60).map((m) => (
+                      {filtered.map((m) => (
                         <div key={m.username} className="autocomplete-item"
                           onMouseDown={() => handleSelect(m)}>
                           <span style={{ fontWeight: 500 }}>{m.name}</span>

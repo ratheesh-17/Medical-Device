@@ -143,6 +143,9 @@ DB_NAME=meddevice
 ALLOWED_ORIGINS=["https://your-cloudfront-domain.cloudfront.net"]
 MODEL_PATH=app/ml/model.pkl
 PIPELINE_PATH=app/ml/pipeline.pkl
+SECRET_KEY=<strong-random-secret>
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+ALERT_PROB_THRESHOLD=0.42
 ```
 
 ### RDS MySQL setup
@@ -163,6 +166,7 @@ After RDS is ready, run seed from a bastion or ECS task:
 
 ```bash
 python -m scripts.seed_db
+python -m scripts.seed_users
 ```
 
 ---

@@ -52,17 +52,23 @@ def predict(
             payload = decode_token(credentials.credentials)
             triggered_by = payload.get("sub", "anonymous")
 
-        # Auto-create alert if high risk and device has a manufacturer
+        # Auto-create alert only if high risk AND the manufacturer has a registered account
         if result["prob_failure"] >= settings.ALERT_PROB_THRESHOLD and device.manufacturer_id:
-            alert = Alert(
-                device_id=device.id,
-                manufacturer_id=device.manufacturer_id,
-                prob_failure=result["prob_failure"],
-                predicted_label=result["predicted_label"],
-                triggered_by=triggered_by,
-                status="unread",
-            )
-            db.add(alert)
+            from app.models.db_models import User
+            mfr_user = db.query(User).filter(
+                User.manufacturer_id == device.manufacturer_id,
+                User.role == "manufacturer",
+            ).first()
+            if mfr_user:
+                alert = Alert(
+                    device_id=device.id,
+                    manufacturer_id=device.manufacturer_id,
+                    prob_failure=result["prob_failure"],
+                    predicted_label=result["predicted_label"],
+                    triggered_by=triggered_by,
+                    status="unread",
+                )
+                db.add(alert)
 
         log_req = PredictRequest(
             device_id=device.id,

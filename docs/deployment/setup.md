@@ -62,6 +62,10 @@ ALLOWED_ORIGINS=["http://localhost:3000"]
 
 MODEL_PATH=app/ml/model.pkl
 PIPELINE_PATH=app/ml/pipeline.pkl
+
+SECRET_KEY=your-secret-key-change-in-prod
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+ALERT_PROB_THRESHOLD=0.42
 ```
 
 ---
@@ -72,6 +76,8 @@ PIPELINE_PATH=app/ml/pipeline.pkl
 cd backend
 pip install -r requirements.txt
 ```
+
+> **Note:** `requirements.txt` pins `bcrypt==4.0.1` (via `passlib[bcrypt]==1.7.4`). Newer bcrypt versions break passlib's CryptContext. Do not upgrade bcrypt independently.
 
 ---
 
@@ -93,16 +99,46 @@ Seeding manufacturers...
   Inserted 31827 manufacturers.
 Computing manufacturer_features (LOO)...
   Inserted 3952 manufacturer_features rows.
+Computing classification_features...
+  Inserted 17 classification_features rows.
+Seeding devices (USA only)...
+  Inserted 33657 devices.
 Seeding model_versions from metrics.json...
   model_versions seeded.
 Done.
 ```
 
-Re-running is safe — it deletes and re-inserts manufacturers, manufacturer_features, and model_versions each time.
+Re-running is safe — it deletes and re-inserts all seeded data each time (delete order: Prediction → Device → ManufacturerFeatures → Manufacturer to respect FK constraints).
 
 ---
 
-## Step 6 — Start the backend
+## Step 6 — Seed user accounts
+
+```bash
+cd backend
+python -m scripts.seed_users
+```
+
+Expected output:
+
+```
+Hashing passwords...
+Querying manufacturers...
+Seeding 3952 manufacturer accounts + 1 user account...
+Done. Seeded 3953 accounts.
+  user      / user123
+  mfr_<id>  / mfr123
+```
+
+This creates:
+- 1 technician account: `user` / `user123`
+- 3,952 manufacturer accounts: `mfr_<manufacturer_id>` / `mfr123` — one for every manufacturer with at least one USA device
+
+> **Performance note:** Both passwords are hashed exactly once each, then the hash string is reused for all bulk inserts. This avoids 3,952 bcrypt operations and completes in seconds.
+
+---
+
+## Step 7 — Start the backend
 
 ```bash
 cd backend
@@ -131,7 +167,7 @@ Interactive API docs: `http://localhost:8000/docs`
 
 ---
 
-## Step 7 — Start the frontend
+## Step 8 — Start the frontend
 
 ```bash
 cd frontend
@@ -139,7 +175,14 @@ npm install
 npm start
 ```
 
-Frontend runs at `http://localhost:3000`.
+Frontend runs at `http://localhost:3000`. You will be redirected to the login page.
+
+**Demo credentials:**
+
+| Role | Username | Password |
+|---|---|---|
+| Technician | `user` | `user123` |
+| Manufacturer | `mfr_5247` (Boston Scientific) | `mfr123` |
 
 ---
 
@@ -149,18 +192,18 @@ Frontend runs at `http://localhost:3000`.
 Med-Device/
 ├── notebook/
 │   ├── outputs/
-│   │   ├── metrics.json           <- model metrics (read by seed_db + /metrics endpoint)
-│   │   ├── eda_summary.json       <- dataset stats
-│   │   ├── preprocessor.pkl       <- intermediate (not used by API directly)
-│   │   └── train.csv / test.csv   <- intermediate (not used by API)
-│   └── model_classes.py           <- ThresholdedClassifier source
+│   │   ├── metrics.json           ← model metrics (read by seed_db + /metrics endpoint)
+│   │   ├── eda_summary.json       ← dataset stats
+│   │   ├── preprocessor.pkl       ← intermediate (not used by API directly)
+│   │   └── train.csv / test.csv   ← intermediate splits
+│   └── model_classes.py           ← ThresholdedClassifier source
 │
 └── backend/
     └── app/
         └── ml/
-            ├── model.pkl          <- ThresholdedClassifier(XGBoost, threshold=0.42)
-            ├── pipeline.pkl       <- ColumnTransformer (TF-IDF + OHE + Scaler)
-            └── model_classes.py   <- must match notebook/model_classes.py
+            ├── model.pkl          ← ThresholdedClassifier(XGBoost, threshold=0.42)
+            ├── pipeline.pkl       ← ColumnTransformer (TF-IDF + OHE + Scaler)
+            └── model_classes.py   ← must match notebook/model_classes.py
 ```
 
 ---
@@ -176,8 +219,14 @@ Check `.env` DB credentials match your MySQL user.
 **`ModuleNotFoundError: No module named 'model_classes'`**
 The `sys.modules` alias in `prediction_service.py` handles this automatically at startup. Ensure `backend/app/ml/model_classes.py` exists and matches the notebook version.
 
-**`seed_db.py` crashes on manufacturer insert**
-The manufacturers CSV has no `country` column — this is expected and handled. The ORM `Manufacturer` model does not include a `country` field.
+**`Invalid credentials` after re-running `seed_db.py`**
+`seed_db.py` does not touch the `users` table. If you wiped the DB entirely (e.g. `reset_db.py`), re-run `seed_users.py` to recreate all accounts.
+
+**`seed_users.py` is slow**
+Should not happen — passwords are hashed once and reused. If it is slow, check that `bcrypt==4.0.1` is installed (`pip show bcrypt`). Newer versions are incompatible with passlib.
 
 **Prediction returns `503`**
 Model not loaded. Check the `/health` endpoint and run notebooks if needed.
+
+**`seed_db.py` crashes on FK constraint**
+Delete order must be: Prediction → Device → ManufacturerFeatures → Manufacturer. The script handles this automatically. If you see FK errors, run `reset_db.py` first.

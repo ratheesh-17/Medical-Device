@@ -1,14 +1,14 @@
-# Medical Device Risk Predictor
+# SentryMed — Medical Device Risk Predictor
 
 Cognizant NPN AI Hackathon — Team Project
 
-Predicts whether a medical device is likely to **fail** (binary: Failure / No Failure) using machine learning trained on ICIJ Implant Files data — historical recall, safety alert, and field safety notice records.
+Predicts whether a USA medical device is likely to **fail** (binary: Failure / No Failure) using XGBoost trained on ICIJ Implant Files data. Technicians look up devices by ID; manufacturers receive real-time alerts when high-risk predictions are made against their devices.
 
 ---
 
 ## Problem Statement
 
-Medical device failures cause patient harm and costly recalls. This system predicts failure risk for a device at the point of submission — before a recall occurs — using manufacturer history and device description as signals. The goal is to enable proactive risk assessment and prioritised safety interventions.
+Medical device failures cause patient harm and costly recalls. SentryMed predicts failure risk for a device at the point of assessment — before a recall occurs — using manufacturer history and device description as signals. The goal is to enable proactive risk assessment and prioritised safety interventions.
 
 ---
 
@@ -20,6 +20,7 @@ Medical device failures cause patient harm and costly recalls. This system predi
 | Backend API | FastAPI (Python) |
 | Database | MySQL |
 | Frontend | React |
+| Auth | JWT (python-jose) + bcrypt (passlib) |
 
 ---
 
@@ -59,19 +60,24 @@ Med-Device/
 │
 ├── backend/                          # FastAPI application
 │   ├── app/
-│   │   ├── main.py                   # App entry point + CORS
+│   │   ├── main.py                   # App entry point + CORS + router registration
 │   │   ├── database.py               # SQLAlchemy engine + session
-│   │   ├── core/config.py            # Settings from .env
-│   │   ├── models/db_models.py       # ORM table definitions
+│   │   ├── core/
+│   │   │   ├── config.py             # Settings from .env (DB, JWT, thresholds)
+│   │   │   └── security.py           # JWT creation/decode, bcrypt, auth dependencies
+│   │   ├── models/db_models.py       # ORM table definitions (9 tables)
 │   │   ├── schemas/schemas.py        # Pydantic request/response schemas
 │   │   ├── api/routes/
-│   │   │   ├── predict.py            # POST /api/v1/predict
-│   │   │   ├── history.py            # GET  /api/v1/predictions
-│   │   │   ├── metrics.py            # GET  /api/v1/metrics[/all]
-│   │   │   └── health.py             # GET  /api/v1/health
+│   │   │   ├── auth.py               # POST /auth/login, GET /auth/me, GET /auth/manufacturers
+│   │   │   ├── predict.py            # POST /predict — device ID lookup + ML inference + alert
+│   │   │   ├── history.py            # GET /predictions — paginated history
+│   │   │   ├── metrics.py            # GET /metrics[/all]
+│   │   │   ├── health.py             # GET /health
+│   │   │   ├── manufacturers.py      # GET /manufacturers, GET /devices
+│   │   │   └── manufacturer.py       # GET /manufacturer/dashboard[/devices][/alerts]
 │   │   ├── services/
-│   │   │   ├── prediction_service.py # ML inference (loads pkl once at startup)
-│   │   │   ├── manufacturer_service.py # DB lookup for LOO features
+│   │   │   ├── prediction_service.py # ML inference singleton (loads pkl once at startup)
+│   │   │   ├── manufacturer_service.py # DB lookup for LOO features + autocomplete
 │   │   │   ├── history_service.py    # Save + retrieve prediction history
 │   │   │   └── metrics_service.py    # Query model_versions table
 │   │   └── ml/
@@ -79,27 +85,35 @@ Med-Device/
 │   │       ├── pipeline.pkl          # ColumnTransformer (TF-IDF + OHE + Scaler)
 │   │       └── model_classes.py      # ThresholdedClassifier (must match notebook version)
 │   ├── scripts/
-│   │   ├── seed_db.py                # Populate manufacturers, features, model_versions
-│   │   └── reset_db.py               # Drop all tables and recreate (use when schema changes)
+│   │   ├── seed_db.py                # Seed manufacturers, devices, features, model_versions
+│   │   ├── seed_users.py             # Seed 1 technician + 3952 manufacturer accounts
+│   │   └── reset_db.py               # Drop all tables and recreate
 │   ├── requirements.txt
 │   └── .env.example
 │
 ├── frontend/                         # React application
 │   └── src/
-│       ├── components/               # ConfidenceBar, ProbabilityBars, RiskBadge, TopFeatures
-│       ├── pages/                    # PredictPage, HistoryPage, MetricsPage, HealthPage
-│       ├── services/api.js           # Axios API calls
-│       └── App.js
+│       ├── components/               # ConfidenceBar, ProbabilityBars, RiskBadge, Topbar, TopFeatures
+│       ├── context/AuthContext.js    # Global auth state + JWT storage
+│       ├── pages/
+│       │   ├── LoginPage.js          # Tab switcher: Technician / Manufacturer
+│       │   ├── PredictPage.js        # Device ID lookup + prediction form
+│       │   ├── HistoryPage.js        # Paginated prediction history
+│       │   ├── MetricsPage.js        # Model performance dashboard
+│       │   ├── HealthPage.js         # System health status
+│       │   └── mfr/MfrDashboardPage.js  # Manufacturer dashboard + alerts
+│       ├── services/api.js           # Axios API calls + JWT interceptor
+│       └── App.js                    # Router + role-based routing
 │
 └── docs/
-    ├── architecture.md               # System design + design decisions + alternatives
-    ├── roadmap.md                    # Development phases + estimation
-    ├── presentation.md               # Presentation guide + judge Q&A prep
-    ├── api/api_reference.md          # All 6 endpoints documented
+    ├── architecture.md               # System design + design decisions
+    ├── roadmap.md                    # Development phases + status
+    ├── presentation.md               # Presentation guide + judge Q&A
+    ├── api/api_reference.md          # All endpoints documented
     ├── ml/ml_pipeline.md             # Full ML pipeline walkthrough
-    ├── database/schema.md            # All 5 tables + seeding instructions
+    ├── database/schema.md            # All tables + seeding instructions
     └── deployment/
-        ├── setup.md                  # Local setup (7 steps)
+        ├── setup.md                  # Local setup (8 steps)
         └── cicd.md                   # GitHub Actions CI + AWS deployment
 ```
 
@@ -121,27 +135,57 @@ cd backend && cp .env.example .env   # edit DB credentials
 # 3. Seed database
 python -m scripts.seed_db
 
-# 4. Start backend
+# 4. Seed user accounts
+python -m scripts.seed_users
+
+# 5. Start backend
 uvicorn app.main:app --reload --port 8000
 
-# 5. Start frontend
+# 6. Start frontend
 cd frontend && npm install && npm start
 ```
 
 ---
 
+## User Roles & Login
+
+| Role | Username | Password | Access |
+|---|---|---|---|
+| Technician | `user` | `user123` | Predict, History, Metrics, Health |
+| Manufacturer | `mfr_<id>` (e.g. `mfr_5247`) | `mfr123` | Manufacturer Dashboard + Alerts |
+
+The login page has a tab switcher. Manufacturer tab shows a searchable dropdown of all 3,952 registered manufacturer accounts (first 200 shown on open, filtered as you type).
+
+---
+
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/v1/health` | Liveness + readiness check |
-| POST | `/api/v1/predict` | Predict failure risk |
-| GET | `/api/v1/predictions` | Paginated prediction history |
-| GET | `/api/v1/metrics` | Active model metrics |
-| GET | `/api/v1/metrics/all` | All model versions |
-| GET | `/api/v1/manufacturers` | Manufacturer autocomplete |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | None | Get JWT token |
+| GET | `/api/v1/auth/me` | Any | Current user info |
+| GET | `/api/v1/auth/manufacturers` | None | Manufacturer accounts for login dropdown |
+| GET | `/api/v1/health` | None | Liveness + readiness check |
+| POST | `/api/v1/predict` | User (optional) | Predict failure risk by device ID |
+| GET | `/api/v1/predictions` | None | Paginated prediction history |
+| GET | `/api/v1/metrics` | None | Active model metrics |
+| GET | `/api/v1/metrics/all` | None | All model versions |
+| GET | `/api/v1/manufacturers` | None | Manufacturer autocomplete |
+| GET | `/api/v1/devices` | None | Device search by name or ID |
+| GET | `/api/v1/manufacturer/dashboard` | Manufacturer | Stats + classification breakdown |
+| GET | `/api/v1/manufacturer/devices` | Manufacturer | Paginated device list with search |
+| GET | `/api/v1/manufacturer/alerts` | Manufacturer | High-risk prediction alerts |
+| PATCH | `/api/v1/manufacturer/alerts/{id}/read` | Manufacturer | Mark alert as read |
 
 Interactive docs: `http://localhost:8000/docs`
+
+---
+
+## Alert System
+
+When a technician predicts a device with `prob_failure ≥ 0.42`, the system automatically creates an alert — but **only if** the device's manufacturer has a registered user account. This prevents orphan alerts for manufacturers with no login.
+
+Manufacturers see unread alerts in their dashboard with device name, failure probability, and the technician username that triggered the prediction.
 
 ---
 
